@@ -85,7 +85,11 @@ type MeditationSession struct {
 
 func main() {
 	// Load Env Vars
-	godotenv.Load()
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("Failure to load environment variables: %v", err)
+		return
+	}
 	dbURL := os.Getenv("DB_URL")
 
 	// open connection to database
@@ -240,7 +244,7 @@ func main() {
 		// Grab User data via email
 		userDB, err := apiCfg.dbQueries.QueryUserEmail(req.Context(), params.Email)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				http.Error(w, "User not found in DB", http.StatusNotFound)
 				return
 			}
