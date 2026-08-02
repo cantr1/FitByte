@@ -12,4 +12,5 @@ This file details how I setup my AWS server to run this project.
 9.) Modified the variables in `bash/env_vars`
 10.) Ran the script to install the service in `bash/install_service.sh`
 
+## Troubles I Had
 __found that I needed to run this to keep the postgres container restarting on boot: `docker update --restart unless-stopped <container_name_or_id>`__
