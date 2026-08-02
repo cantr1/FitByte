@@ -1,0 +1,16 @@
+[Unit]
+Description=FitByte - Web Fitness Tracking
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=fitbyte
+WorkingDirectory=/opt/fitbyte
+ExecStart=/opt/fitbyte/fitbyte
+Restart=on-failure
+RestartSec=5s
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

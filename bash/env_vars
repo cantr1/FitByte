@@ -1,0 +1,8 @@
+# Sample file - overwrite with your vars
+DB_URL=postgres://username:password@localhost:5432/fitbyte?sslmode=disable
+PORT=:8080
+FILEPATH_ROOT=web
+USER_CREATION_TOKEN=replace-me
+ADMIN_KEY=replace-me
+TOKEN_DURATION=3600
+TOKEN_SECRET=replace-me
