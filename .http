@@ -1,0 +1,3 @@
+@admin_key=replace-me
+
+GET http://localhost:8080/api/healthy

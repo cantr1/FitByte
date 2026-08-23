@@ -181,9 +181,10 @@
         </form>
 
         <div class="login-footer">
-            Don't have an account? <a href="#">Create one</a>
+            Don't have an account? <a href="#" id="create-account-link">Create one</a>
         </div>
     </div>
+    <script src="/web/app.js"></script>
     <script>
         if (localStorage.getItem("accessToken")) {
             window.location.href = "/web/";
@@ -192,6 +193,7 @@
         const loginForm = document.querySelector("#login-form");
         const loginMessage = document.querySelector("#login-message");
         const loginButton = document.querySelector(".login-btn");
+        const createAccountLink = document.querySelector("#create-account-link");
 
         loginForm.addEventListener("submit", async (event) => {
             event.preventDefault();
@@ -239,6 +241,30 @@
             } finally {
                 loginButton.disabled = false;
                 loginButton.textContent = "Sign In";
+            }
+        });
+
+        createAccountLink.addEventListener("click", async (event) => {
+            event.preventDefault();
+
+            const email = document.querySelector("#email").value;
+            const password = document.querySelector("#password").value;
+
+            loginMessage.style.color = "#b42318";
+            loginMessage.textContent = "";
+            loginButton.disabled = true;
+            createAccountLink.textContent = "Creating...";
+
+            try {
+                await createUserAccount(email, password);
+                loginMessage.style.color = "#067647";
+                loginMessage.textContent = "Account created. You can sign in now.";
+            } catch (error) {
+                console.error("Create account request failed:", error);
+                loginMessage.textContent = error.message || "Unable to create account";
+            } finally {
+                loginButton.disabled = false;
+                createAccountLink.textContent = "Create one";
             }
         });
     </script>

@@ -136,17 +136,18 @@ func main() {
 	// Create User in DB
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, req *http.Request) {
 		// Check Access Token in Request
-		token, err := auth.GetBearerToken(*req)
-		if err != nil {
-			log.Printf("Error parsing token: %v", err)
-			http.Error(w, "Error parsing access token", http.StatusUnauthorized)
-			return
-		}
-		if token != apiCfg.UserCreationToken {
-			log.Printf("User creation request attempted w bad token")
-			http.Error(w, "Access denied", http.StatusForbidden)
-			return
-		}
+		// token, err := auth.GetBearerToken(*req)
+		// if err != nil {
+		// 	log.Printf("Error parsing token: %v", err)
+		// 	http.Error(w, "Error parsing access token", http.StatusUnauthorized)
+		// 	return
+		// }
+		// if token != apiCfg.UserCreationToken {
+		// 	log.Printf("User creation request attempted w bad token")
+		// 	http.Error(w, "Access denied", http.StatusForbidden)
+		// 	return
+		// }
+		// -- The above was used in testing the initial API - no longer useful for general user creation
 
 		// Set response header type
 		w.Header().Set("Content-Type", "application/json")
