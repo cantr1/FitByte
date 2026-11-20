@@ -1,0 +1,17 @@
+---
+- name: Setup AWS EC2 Server for FitByte Production
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+  - name: Install Docker Engine
+    ansible.builtin.apt:
+      name: docker.io
+      state: present
+
+  - name: Enable and Start Docker
+    ansible.builtin.systemd:
+      name: docker
+      state: started
+      enabled: true
