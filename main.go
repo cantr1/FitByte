@@ -56,6 +56,16 @@ type SleepSession struct {
 	UserID        uuid.UUID     `json:"user_id"`
 }
 
+// Sleep durations are whole minutes, matching PostgreSQL INTEGER columns.
+// Using int32 makes JSON decoding reject values that cannot fit in the database.
+type sleepParameters struct {
+	SleepStart    *time.Time `json:"sleep_start"`
+	SleepEnd      *time.Time `json:"sleep_end"`
+	REMDuration   *int32     `json:"rem_duration_mins"`
+	LightDuration *int32     `json:"light_duration_mins"`
+	DeepDuration  *int32     `json:"deep_duration_mins"`
+}
+
 type ExerciseSession struct {
 	ID           uuid.UUID `json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -130,7 +140,9 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Create User in DB
@@ -211,7 +223,9 @@ func main() {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Login w/ User PW
@@ -290,6 +304,7 @@ func main() {
 			RefreshToken: refreshToken,
 		}
 
+		// #nosec G117 -- Successful login intentionally returns tokens to the authenticated client.
 		dat, err := json.Marshal(user)
 		if err != nil {
 			http.Error(w, "Internal server error - unable to marshal user data", http.StatusInternalServerError)
@@ -297,7 +312,9 @@ func main() {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write(dat)
+		if _, err := w.Write(dat); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Refresh
@@ -356,7 +373,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(dat)
+		if _, err := w.Write(dat); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Revoke
@@ -449,16 +468,8 @@ func main() {
 		// JWT expired
 
 		// Parse out the parameters for the entry
-		type parameters struct {
-			SleepStart    *time.Time     `json:"sleep_start"`
-			SleepEnd      *time.Time     `json:"sleep_end"`
-			REMDuration   *time.Duration `json:"rem_duration_mins"`
-			LightDuration *time.Duration `json:"light_duration_mins"`
-			DeepDuration  *time.Duration `json:"deep_duration_mins"`
-		}
-
 		decoder := json.NewDecoder(req.Body)
-		params := parameters{}
+		params := sleepParameters{}
 		err = decoder.Decode(&params)
 		if err != nil {
 			log.Printf("Error decoding parameters: %v", err)
@@ -507,9 +518,9 @@ func main() {
 		databaseParams := database.CreateSleepSessionParams{
 			SleepStart:        *params.SleepStart,
 			SleepEnd:          *params.SleepEnd,
-			RemDurationMins:   int32(*params.REMDuration),
-			LightDurationMins: int32(*params.LightDuration),
-			DeepDurationMins:  int32(*params.DeepDuration),
+			RemDurationMins:   *params.REMDuration,
+			LightDurationMins: *params.LightDuration,
+			DeepDurationMins:  *params.DeepDuration,
 			UserID:            userDBID,
 		}
 
@@ -531,7 +542,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write(dat)
+		if _, err := w.Write(dat); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 
 	})
 
@@ -599,7 +612,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Reset the Sleep DB
@@ -768,7 +783,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write(dat)
+		if _, err := w.Write(dat); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Get exercise data by user ID
@@ -832,7 +849,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Reset the Exercise DB
@@ -972,7 +991,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		w.Write(dat)
+		if _, err := w.Write(dat); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Get meditation data by user ID
@@ -1033,7 +1054,9 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing HTTP response: %v", err)
+		}
 	})
 
 	// Reset the Meditation DB
@@ -1074,8 +1097,9 @@ func main() {
 
 	// Start Server
 	server := &http.Server{
-		Addr:    apiCfg.Port,
-		Handler: mux,
+		Addr:              apiCfg.Port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	log.Fatal(server.ListenAndServe())

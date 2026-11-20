@@ -18,8 +18,16 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run Go Version
-        run: go test ./... -cover
+      - name: Race detection
+        run: go test -race -cover ./...
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+
+      - name: Security Checks
+        # sqlc's token query constants are parameterized SQL, not credentials.
+        # Keep all other rules enabled for this generated file.
+        run: gosec -exclude-rules='internal/database/tokens\.sql\.go$:G101' ./...
 
   # Run Terraform Validation
   terraform_validation:
