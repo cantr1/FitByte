@@ -1,17 +1,164 @@
 ---
+# Ansible play to setup fitbyte project
+# Intention is to scp / drop this file on the server
+# Install ansible-core, then from the repo root run:
+# ansible-galaxy collection install -r ansible/requirements.yml
+# ansible-playbook ansible/main.yml
+
+# Prerequisite: /etc/fitbyte/fitbyte.env must exist on this server.
+# Keep it outside the repository, owned by root with mode 0600.
+# Format: KEY=value, without shell exports or surrounding quotes.
 - name: Setup AWS EC2 Server for FitByte Production
-  hosts: all
+  hosts: localhost
   become: true
   gather_facts: true
+  connection: local
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    fitbyte_env_file: /etc/fitbyte/fitbyte.env
+    fitbyte_revision: main
+    fitbyte_http_port: 80
+    goose_version: v3.24.1
+    goose_bin_dir: "/opt/goose/{{ goose_version }}/bin"
+
+  pre_tasks:
+    - name: Check for deployment configuration
+      ansible.builtin.stat:
+        path: "{{ fitbyte_env_file }}"
+      register: fitbyte_env
+
+    - name: Require deployment configuration
+      ansible.builtin.assert:
+        that:
+          - fitbyte_env.stat.exists
+          - fitbyte_env.stat.isreg | default(false)
+        fail_msg: "Create {{ fitbyte_env_file }} before deploying."
 
   tasks:
-  - name: Install Docker Engine
+  - name: Install deployment dependencies
     ansible.builtin.apt:
-      name: docker.io
+      name:
+        - git
+        - docker.io
+        - ca-certificates
+        - golang-go
+        - python3-requests
       state: present
+      update_cache: true
+      cache_valid_time: 3600
 
   - name: Enable and Start Docker
     ansible.builtin.systemd:
       name: docker
       state: started
       enabled: true
+
+  - name: Clone the repo
+    ansible.builtin.git:
+      repo: 'https://github.com/cantr1/FitByte'
+      dest: '/opt/fitbyte'
+      version: "{{ fitbyte_revision }}"
+    register: fitbyte_checkout
+
+  # Build before migrations so a failed build cannot change the database schema.
+  - name: Build FitByte image for the checked-out commit
+    community.docker.docker_image:
+      name: fitbyte
+      tag: "{{ fitbyte_checkout.after }}"
+      source: build
+      build:
+        path: /opt/fitbyte
+      timeout: 600
+
+  - name: Create Goose installation directory
+    ansible.builtin.file:
+      path: "{{ goose_bin_dir }}"
+      state: directory
+      mode: '0755'
+
+  # Only build the PostgreSQL driver to reduce memory use on the t3.micro.
+  - name: Install pinned Goose release
+    ansible.builtin.command:
+      argv:
+        - /usr/bin/go
+        - install
+        - -tags=no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no_ydb
+        - "github.com/pressly/goose/v3/cmd/goose@{{ goose_version }}"
+      chdir: /var/tmp
+      creates: "{{ goose_bin_dir }}/goose"
+    environment:
+      GOBIN: "{{ goose_bin_dir }}"
+      GOTOOLCHAIN: local
+      CGO_ENABLED: '0'
+      GOFLAGS: '-p=1'
+      GOMAXPROCS: '1'
+
+  - name: Read deployment configuration
+    ansible.builtin.slurp:
+      src: "{{ fitbyte_env_file }}"
+    register: fitbyte_env_contents
+    no_log: true
+
+  # Read the documented KEY=value format without executing it as a shell script.
+  - name: Extract database connection string
+    ansible.builtin.set_fact:
+      fitbyte_db_urls: "{{ fitbyte_env_contents.content | b64decode | regex_findall('(?m)^DB_URL=([^\\r\\n]+)\\r?$') }}"
+    no_log: true
+
+  - name: Require exactly one database connection string
+    ansible.builtin.assert:
+      that:
+        - fitbyte_db_urls | length == 1
+      fail_msg: "The environment file must contain exactly one nonempty DB_URL=value line."
+
+  # Goose tracks applied versions in PostgreSQL; reruns apply only pending files.
+  # Keep future container startup tasks after this task so failures stop deployment.
+  - name: Apply pending database migrations
+    ansible.builtin.command:
+      argv:
+        - "{{ goose_bin_dir }}/goose"
+        - -env=none
+        - -dir
+        - /opt/fitbyte/sql/schema
+        - up
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: "{{ fitbyte_db_urls | first }}"
+    register: goose_migration
+    changed_when: "'no migrations to run' not in (goose_migration.stdout ~ goose_migration.stderr)"
+    no_log: true
+
+  - name: Start FitByte container
+    community.docker.docker_container:
+      name: fitbyte
+      image: "fitbyte:{{ fitbyte_checkout.after }}"
+      state: started
+      restart_policy: unless-stopped
+      env_file: "{{ fitbyte_env_file }}"
+      # These values must agree with the port mapping and image layout.
+      env:
+        PORT: ':8080'
+        FILEPATH_ROOT: web
+      published_ports:
+        - "{{ fitbyte_http_port }}:8080"
+      log_driver: json-file
+      log_options:
+        max-size: '10m'
+        max-file: '3'
+    no_log: true
+
+  # This endpoint checks HTTP liveness, not database readiness.
+  - name: Wait for FitByte HTTP health check
+    ansible.builtin.uri:
+      url: "http://127.0.0.1:{{ fitbyte_http_port }}/api/healthy"
+      status_code: 200
+    register: fitbyte_health
+    until: fitbyte_health.status | default(0) == 200
+    retries: 12
+    delay: 5
+
+  - name: Verify web client is served
+    ansible.builtin.uri:
+      url: "http://127.0.0.1:{{ fitbyte_http_port }}/web/"
+      status_code: 200

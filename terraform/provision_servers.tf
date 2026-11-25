@@ -31,7 +31,7 @@ resource "aws_instance" "fitbyte_server" {
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.fitbyte_public_a.id
   vpc_security_group_ids = [aws_security_group.fitbyte_ec2_sg.id]
-  key_name               = "sample_key"
+  key_name               = "aws_key"
 
   tags = {
     Name = "fitbyte_server"
@@ -44,6 +44,7 @@ resource "aws_db_instance" "postgres" {
   engine            = "postgres"
   instance_class    = "db.t3.micro"
   allocated_storage = 20
+  db_name           = "fitbyte"
 
   db_subnet_group_name   = aws_db_subnet_group.fitbyte_db.name
   vpc_security_group_ids = [aws_security_group.fitbyte_rds.id]
